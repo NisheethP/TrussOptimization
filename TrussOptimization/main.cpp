@@ -46,9 +46,9 @@ int main()
 	sf::RenderWindow window(sf::VideoMode(1600, 900), "Truss Optimization");
 	
 	const Coord FRAME_ORIGIN = { 100,850 };		//The coordinates of the first node. Origin at TOP-LEFT CORNER of screen. X rightwards; Y downwards;
-	int scaleFactor = 75;	//Scaling of the truss for rendering. The nodes are 1 unit apart. Spacing is scaled by this factor .
-	int sizeX = 7;			//Number of Nodes in X direction
-	int sizeY = 7;			//Number of Nodes in Y direction
+	int scaleFactor = 275;	//Scaling of the truss for rendering. The nodes are 1 unit apart. Spacing is scaled by this factor .
+	int sizeX = 5;			//Number of Nodes in X direction
+	int sizeY = 4;			//Number of Nodes in Y direction
 	float baseLinkThickness = 1.f;
 	float nodeRadius = 6.f;
 	
@@ -102,6 +102,33 @@ int main()
 
 		shapeLinks.push_back(tempRect);
 	}
+
+	//================================================================
+	//Truss Testing Code
+	std::vector<Node> Tnodes;
+	std::vector<Link> Tlinks;
+
+	Tnodes.push_back({ 0,0 });
+	Tnodes.push_back({ 1,1 });
+	Tnodes.push_back({ 2,0 });
+	
+	Tlinks.push_back(Link(Tnodes[0], Tnodes[1]));
+	Tlinks.push_back(Link(Tnodes[0], Tnodes[2]));
+	Tlinks.push_back(Link(Tnodes[1], Tnodes[2]));
+	
+	Truss tempTruss(Tnodes, Tlinks);
+	TrussFEM fem(&tempTruss);
+	
+	fem.applySimpleSupport(0);
+	fem.applyRollerSupport(2);
+	fem.applyForceY(1, -10);
+	fem.assembleGlobal();
+	fem.solve();
+	
+	std::cout << fem.getDisplacement();
+
+	;
+	//================================================================
 	
 	//Programme Loop. This is when the rendering is happening
 	while (window.isOpen())

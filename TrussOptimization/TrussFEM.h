@@ -21,17 +21,27 @@ class TrussFEM
 	VectorXd displacement;
 	VectorXd force;
 	std::vector<int> presDisp;							//List of node_dofs with prescribed displacements
-	VectorXd soln;										//Lists the force on prescribed dofs. Displacements on the other dofs.
+	VectorXd virtualDisp;								//Displacement for the Virtual force at optNode dof
+	int optNode;										//Force at which dof
 public:
 	TrussFEM(Truss* truss);
 	
 	static Matrix4d generateLocalStiffness(Link& link);	//Calculates the stiffness of the passed link
 	void assembleGlobal();								//Assembles the Global stiffness for the given Truss, using the local stiffness data
+	
 	bool applyForceX(int nodeNum, double value);		//Add 'value' force in X direction to the given 'nodeNum' in the 'force' vector
 	bool applyForceY(int nodeNum, double value);		//Add 'value' force in X direction to the given 'nodeNum' in the 'force' vector
 	bool applySimpleSupport(int nodeNum);				//Adds ux=0 and uy=0 value to the given 'nodeNum' in the 'displacement' vector
 	bool applyRollerSupport(int nodeNum);				//Adds ux=0 value to the given 'nodeNum' in the 'displacement' vector
+	bool setOptNode(int dofNum);						//Sets the dof that is to be 
 
+	bool isPrescribed(int dof);
+	bool solve();
+
+	VectorXd getDisplacement() { return displacement; }
+	VectorXd getForce() { return force; }
+	VectorXd getVirtualDisp() { return virtualDisp; }
+	
 	~TrussFEM();
 };
 
