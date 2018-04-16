@@ -2,20 +2,23 @@
 #include <cmath>
 #include <iostream>
 #include <stdlib.h>
+#include <algorithm>
 
-TrussFEM::TrussFEM(Truss* pTruss) :
+TrussFEM::TrussFEM(Truss* pTruss, int pOptNode, OptCond pMode) :
 	truss(pTruss),
 	displacement(truss->getNodes().size() * 2),	//2 DOF per node
 	force(truss->getNodes().size() * 2),
 	globalStiffness(truss->getNodes().size() * 2, truss->getNodes().size() * 2),
-	virtualDisp(truss->getNodes().size() * 2)
+	virtualDisp(truss->getNodes().size() * 2),
+	mode(pMode),
+	optNode(pOptNode)
 {
-	for (int i = 0; i < force.size(); i++)
-	{
-		force(i) = 0;
-		displacement(i) = 0;
-	}
-	
+	force.setZero();
+	displacement.setZero();
+	virtualDisp.setZero();
+	globalStiffness.setZero();
+
+
 }
 
 Matrix4d TrussFEM::generateLocalStiffness(Link & link)
@@ -158,34 +161,34 @@ bool TrussFEM::isPrescribed(int dof)
 
 bool TrussFEM::solve()
 {
-	using T = Eigen::Triplet<double>;
 	int redSize = force.size() - presDisp.size();
-	Eigen::SparseMatrix<double> reducedStiffness(force.size(), force.size());
-	std::vector<T> trips;
-	for (int k = 0; k < globalStiffness.outerSize(); k++)
+	Eigen::SparseMatrix<double> reducedStiffness(redSize, redSize);
+	Eigen::SparseMatrix<double> temp = globalStiffness;
+
+	//std::cout << globalStiffness << std::endl;
+
+	for (int i = 0; i < presDisp.size(); i++)
 	{
-		for (Eigen::SparseMatrix<double>::InnerIterator iter(globalStiffness, k); iter; ++iter)
-		{
-			int i = iter.row();
-			int j = iter.col();
-
-			//printf("%d - %d \t %d - %d \t %f => %d \n", i, isPrescribed(i), j, isPrescribed(j), iter.value(), !isPrescribed(i) && !isPrescribed(j));
-			if (!isPrescribed(i) && !isPrescribed(j) )
-			{
-				T temp(iter.row(), iter.col(), iter.value());
-				trips.push_back(temp);
-			}
-		}
-		printf("====================\n");
+		std::vector<int> sorted(presDisp);
+		std::sort(sorted.begin(), sorted.end());
+		temp = removeRowCol(presDisp[i]-i, temp);
 	}
-	reducedStiffness.setFromTriplets(trips.begin(), trips.end());
+	
+	reducedStiffness = temp;
+	
+	//std::cout << reducedStiffness;
 
-	VectorXd b(force.size()-presDisp.size()), x(force.size() - presDisp.size());
+	VectorXd b(redSize), x(redSize);
+	int j = 0;
 	for (int i = 0; i < force.size(); i++)
 	{
 		if (!isPrescribed(i))
-			b(i) = force(i);
+		{
+			b(j) = force(i);
+			j++;
+		}
 	}
+	
 
 	Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > solver;
 	solver.compute(reducedStiffness);
@@ -203,26 +206,98 @@ bool TrussFEM::solve()
 		return false;
 	}
 	
+	j = 0;
 	for (int i = 0; i < displacement.size(); i++)
 	{
 		if (!isPrescribed(i))
-			displacement(i) = x(i);
+		{
+			displacement(i) = x(j);
+			j++;
+		}
 	}
-
+		
+	j = 0;
 	//Solving for displacement from virtual force;
-	for (int i = 0; i < force.size(); i++)
+	if (mode == OptCond::NodeDisplacement)
 	{
-		if (!isPrescribed(i))
+		VectorXd tempForce;
+		tempForce.resize(force.size());
+		tempForce.setZero();
+		for (int i = 0; i < force.size(); i++)
 		{
 			if (i == optNode)
-				b(i) = 1;
-			else
-				b(i) = 0;
+				tempForce(i) = 1;
+		}
+
+		int j = 0;
+		for (int i = 0; i < force.size(); i++)
+		{
+			if (!isPrescribed(i))
+			{
+				b(j) = tempForce(i);
+				j++;
+			}
+		}
+
+		x = solver.solve(b);
+		if (solver.info() != Eigen::Success)
+		{
+			std::cout << "Virtual Displacement solve failed";
+			return false;
+		}
+	}
+	
+
+	return true;
+}
+
+Eigen::SparseMatrix<double> TrussFEM::removeRowCol(int dof, Eigen::SparseMatrix<double> mat)
+{
+	
+	using MatrixXd = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+	MatrixXd tempMatrix;
+	int size = mat.outerSize();
+	tempMatrix.resize(size, size);
+	
+	tempMatrix.setZero(); 
+	
+	for (int k = 0; k < mat.outerSize(); k++)
+	{
+		for (Eigen::SparseMatrix<double>::InnerIterator iter(mat, k); iter; ++iter)
+		{
+			int i = iter.row();
+			int j = iter.col();
+			tempMatrix(i, j) = iter.value();
+		}
+	}
+	Eigen::SparseMatrix<double> temp2;
+	std::vector<Eigen::Triplet<double>> trips;
+	if (dof < size)
+	{
+		temp2.resize(size-1,size-1);
+		temp2.setZero();
+		
+		for (int i = 0; i < size-1; i++)
+		{
+			for (int j = 0; j < size-1; j++)
+			{
+				int a = i, b = j;
+				if (i < dof && j >= dof)
+					b++;
+				if (i >= dof && j < dof)
+					a++;
+				if (i >= dof && j >= dof)
+				{
+					a++; 
+					b++;
+				}
+				trips.push_back(Eigen::Triplet<double>(i,j,tempMatrix(a,b)));
+			}
 		}
 	}
 
-
-	return true;
+	temp2.setFromTriplets(trips.begin(), trips.end());
+	return temp2;
 }
 
 TrussFEM::~TrussFEM()

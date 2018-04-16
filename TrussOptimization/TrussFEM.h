@@ -13,6 +13,12 @@
 using Matrix4d = Eigen::Matrix<double, 4, 4>;
 using VectorXd = Eigen::Matrix<double, Eigen::Dynamic, 1>;
 
+enum OptCond
+{
+	MeanCompliance,
+	NodeDisplacement
+};
+
 class TrussFEM
 {
 
@@ -23,8 +29,10 @@ class TrussFEM
 	std::vector<int> presDisp;							//List of node_dofs with prescribed displacements
 	VectorXd virtualDisp;								//Displacement for the Virtual force at optNode dof
 	int optNode;										//Force at which dof
+	OptCond mode;										//Solve for virtual force if mode = NodeDisplacement
+
 public:
-	TrussFEM(Truss* truss);
+	TrussFEM(Truss* truss, int pOptNode = 2, OptCond pMode = OptCond::MeanCompliance);
 	
 	static Matrix4d generateLocalStiffness(Link& link);	//Calculates the stiffness of the passed link
 	void assembleGlobal();								//Assembles the Global stiffness for the given Truss, using the local stiffness data
@@ -37,6 +45,8 @@ public:
 
 	bool isPrescribed(int dof);
 	bool solve();
+
+	static Eigen::SparseMatrix<double> removeRowCol(int dof, Eigen::SparseMatrix<double> mat);
 
 	VectorXd getDisplacement() { return displacement; }
 	VectorXd getForce() { return force; }
