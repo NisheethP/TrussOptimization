@@ -145,7 +145,7 @@ int main()
 			double k = 1.5;
 			double red = static_cast<sf::Uint8>(color * k);
 			double green = static_cast<sf::Uint8>((255 - color)*k);
-			double blue = 50;
+			double blue = 150;
 			shapeLinks[i].setFillColor(sf::Color(red, green, blue));
 		}
 
@@ -277,17 +277,17 @@ void optimizeMeanCompliance(TrussFEM* mesh, double maxVol, double Amin, double A
 
 		//std::cout << std::endl << linkDisp;
 		//std::cout << std::endl << locStiff;
-			
+
 		tempVar = (linkDisp.transpose()*locStiff*linkDisp);
 		//tempVar /= link.getLength()*link.getArea();
 		//tempVar *= link.getLength()*link.getArea();
 		Lambda += tempVar;
 	}
-	
+
 	Lambda /= maxVol;
-	
+
 	double limVol = 0;
-		
+
 	for (int i = 0; i < size; i++)
 	{
 		double tempVar;
