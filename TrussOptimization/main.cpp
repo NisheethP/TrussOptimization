@@ -18,6 +18,7 @@ enum State
 	Animating						//Animating the iteration to the optimal truss from GS;
 };
 
+//Struct to hod the coordinates of a point.
 struct Coord
 {
 	float x;
@@ -28,7 +29,11 @@ struct Coord
 
 	Coord operator-(Coord& pX)
 	{
-		return Coord(x-pX.x,y-pX.y);
+		return Coord(x - pX.x, y - pX.y);
+	}
+	Coord operator+(Coord& pX)
+	{
+		return Coord(x + pX.x, y + pX.y);
 	}
 };
 
@@ -50,11 +55,11 @@ int main()
 	
 	const Coord FRAME_ORIGIN = { 100,850 };		//The coordinates of the first node. Origin at TOP-LEFT CORNER of screen. X rightwards; Y downwards;
 	int scaleFactor = 200;	//Scaling of the truss for rendering. The nodes are 1 unit apart. Spacing is scaled by this factor .
-	int sizeX = 3;			//Number of Nodes in X direction
-	int sizeY = 3;			//Number of Nodes in Y direction
-	float maxVolume = 100;	//The volume constraint for the problem
-	float Amin = 1;
-	float Amax = 10;
+	int sizeX = 5;			//Number of Nodes in X direction
+	int sizeY = 5;			//Number of Nodes in Y direction
+	double maxVolume = 200;	//The volume constraint for the problem
+	double Amin = 0.001;	//The lower bound on the area
+	double Amax = 10;		//The upper bound on the area
 
 	float baseLinkThickness = 1.f;
 	float nodeRadius = 6.f;
@@ -83,11 +88,9 @@ int main()
 
 	TrussFEM mesh(&groundStructure);
 	mesh.applySimpleSupport(0);
-	mesh.applySimpleSupport(3);
-	mesh.applyRollerSupport(6);
+	mesh.applyRollerSupport(20);
 
-	mesh.applyForceY(2, -10000);
-	mesh.applyForceY(8, -20000);
+	mesh.applyForceY(4, -15000);
 	int iteration = 0;
 	
 	//Programme Loop. This is when the rendering is happening
@@ -105,7 +108,7 @@ int main()
 			tempCircle.setOrigin(sf::Vector2f(nodeRadius, nodeRadius));
 			tempCircle.setRadius(nodeRadius);
 			tempCircle.setPosition(tempCoord.sf_Vec());
-			tempCircle.setFillColor(sf::Color(200, 200, 200));
+			tempCircle.setFillColor(sf::Color(255, 255, 255));
 			shapeNodes.push_back(tempCircle);
 		}
 
@@ -124,7 +127,7 @@ int main()
 			size.y = static_cast<float>(baseLinkThickness*curLink.getArea());
 
 			float angle = static_cast<float>(curLink.getSlope());
-			angle *= -180 / PI;
+			angle *= static_cast<float>(-180 / PI);
 
 			tempRect.setPosition(tempCoord1.sf_Vec());
 			tempRect.setSize(size);
@@ -139,9 +142,11 @@ int main()
 			double color = 1/temp;
 			color *= (shapeLinks[i].getSize().y-Amin);
 			color *= 255;
-			color = static_cast<sf::Uint8>(color);
 			double k = 1.5;
-			shapeLinks[i].setFillColor(sf::Color((color)*k, (255-color)*k, 0));
+			double red = static_cast<sf::Uint8>(color * k);
+			double green = static_cast<sf::Uint8>((255 - color)*k);
+			double blue = 50;
+			shapeLinks[i].setFillColor(sf::Color(red, green, blue));
 		}
 
 		//Event handling for the code
@@ -163,13 +168,13 @@ int main()
 			
 		
 		window.display();
-		printf("/nIter: %i \t Volume: %f \n ====================\n", iteration, mesh.getVol());
+		printf("\nIter: %i \t Volume: %f \n ====================\n", iteration, mesh.getVol());
 		iteration++;
 		optimizeMeanCompliance(&mesh, maxVolume, Amin, Amax);
 
 		//VectorXd tempDisp = mesh.getDisplacement();
 		//std::cout << std::endl << tempDisp << std::endl;
-		sf::sleep(sf::seconds(1));
+		//sf::sleep(sf::milliseconds(500));
 	}
 
 	return 0;
@@ -297,7 +302,7 @@ void optimizeMeanCompliance(TrussFEM* mesh, double maxVol, double Amin, double A
 
 		double x = tempVar;
 		x /= Lambda;
-		std::cout << "\n X: " << x;
+		std::cout << std::endl << i << ".  Lambda: " << x;
 		x = pow(x, beta);
 		x *= Area(i);
 		std::cout << "\t Area: " << x;
@@ -305,14 +310,8 @@ void optimizeMeanCompliance(TrussFEM* mesh, double maxVol, double Amin, double A
 		if (x >= Amin && x <= Amax)
 			mesh->getTruss().updateArea(i, x);
 		else if (x > Amax)
-		{
 			mesh->getTruss().updateArea(i, Amax);
-			limVol += link.getLength()*Amax;
-		}
 		else if (x < Amin)
-		{
 			mesh->getTruss().updateArea(i, Amin);
-			limVol += link.getLength()*Amin;
-		}
 	}
 }
