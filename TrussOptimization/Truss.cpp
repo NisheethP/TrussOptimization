@@ -18,6 +18,19 @@ Truss::Truss(Truss& truss)
 	links = truss.getLinks();
 }
 
+void Truss::initArea(double ar)
+{
+	for (std::vector<Link>::iterator it = links.begin(); it != links.end(); ++it)
+	{
+		it->setArea(ar);
+	}
+}
+
+void Truss::updateArea(int link, double area)
+{
+	links[link].setArea(area);
+}
+
 int Truss::getNodeNum(Node & pNode)
 {
 	for (int i = 0; i < nodes.size(); i++)

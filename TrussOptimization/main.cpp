@@ -40,15 +40,22 @@ void getGroundStructure(int sizex, int sizey, Truss* baseTruss);
 //Convert between coordinates of nodes (on lattice points) to those on the screen (display coordinates)
 Coord convert(Node& base, const Coord& FrameOrigin, int scale);
 
+//Does one iteration of the optimality criterion approach
+void optimizeMeanCompliance(TrussFEM* mesh, double maxVol, double Amin = 0.01, double Amax = 2);
+
 //Standard insertion point for the programme. This has a console besides the windows being made. For DEBUG VERSION.
 int main()
 {
 	sf::RenderWindow window(sf::VideoMode(1600, 900), "Truss Optimization");
 	
 	const Coord FRAME_ORIGIN = { 100,850 };		//The coordinates of the first node. Origin at TOP-LEFT CORNER of screen. X rightwards; Y downwards;
-	int scaleFactor = 400;	//Scaling of the truss for rendering. The nodes are 1 unit apart. Spacing is scaled by this factor .
+	int scaleFactor = 200;	//Scaling of the truss for rendering. The nodes are 1 unit apart. Spacing is scaled by this factor .
 	int sizeX = 3;			//Number of Nodes in X direction
-	int sizeY = 2;			//Number of Nodes in Y direction
+	int sizeY = 3;			//Number of Nodes in Y direction
+	float maxVolume = 100;	//The volume constraint for the problem
+	float Amin = 1;
+	float Amax = 10;
+
 	float baseLinkThickness = 1.f;
 	float nodeRadius = 6.f;
 	
@@ -60,60 +67,91 @@ int main()
 	std::vector<sf::CircleShape> shapeNodes;
 	std::vector<sf::RectangleShape> shapeLinks;
 
-	std::cout << groundStructure.getLinks().size() << std::endl;		//DEBUG output for the number of links in the GroundStructure
+	std::cout << "Number of links in GS: " << groundStructure.getLinks().size() << std::endl;		//DEBUG output for the number of links in the GroundStructure
 	
 	//DEBUG Code to verify the local stiffness matrix
 	//Link tlink({ 0,0 }, { 1,1 });
 	//std::cout << TrussFEM::generateLocalStiffness(tlink);
 
-	//Setting up the render for NODES on the screen
-	for (int i = 0; i < groundStructure.getNodes().size(); i++)
-	{
-		Node curNode = groundStructure.getNodes().at(i);
-		Coord tempCoord = convert(curNode, FRAME_ORIGIN,scaleFactor);
-		sf::CircleShape tempCircle;
-		tempCircle.setOrigin(sf::Vector2f(nodeRadius, nodeRadius));
-		tempCircle.setRadius(nodeRadius);
-		tempCircle.setPosition(tempCoord.sf_Vec());
-		tempCircle.setFillColor(sf::Color(200, 100, 0));
-		shapeNodes.push_back(tempCircle);
-	}
-
-	//Setting up the render for the LINKS on the screen
+	double netL = 0;
 	for (int i = 0; i < groundStructure.getLinks().size(); i++)
-	{
-		Link curLink = groundStructure.getLinks().at(i);
-		sf::RectangleShape tempRect;
-		Coord tempCoord1 = convert(curLink.getNode()[0], FRAME_ORIGIN, scaleFactor);
-		Coord tempCoord2 = convert(curLink.getNode()[1], FRAME_ORIGIN, scaleFactor);
-		
-		tempRect.setOrigin(0,baseLinkThickness/2);
-		
-		sf::Vector2f size = { 0,0 };
-		size.x = static_cast<float>(curLink.getLength()*scaleFactor);
-		size.y = static_cast<float>(baseLinkThickness);
+		netL += groundStructure.getLinks().at(i).getLength();
+	double baseAreaFactor = maxVolume / netL;
 
-		float angle = static_cast<float>(curLink.getSlope());
-		angle *= -180 / PI;
-		
-		tempRect.setPosition(tempCoord1.sf_Vec());
-		tempRect.setSize(size);
-		tempRect.setRotation(angle);
+	groundStructure.initArea(1);
+	
 
-		shapeLinks.push_back(tempRect);
-	}
+	TrussFEM mesh(&groundStructure);
+	mesh.applySimpleSupport(0);
+	mesh.applySimpleSupport(3);
+	mesh.applyRollerSupport(6);
 
+	mesh.applyForceY(2, -10000);
+	mesh.applyForceY(8, -20000);
+	int iteration = 0;
+	
 	//Programme Loop. This is when the rendering is happening
 	while (window.isOpen())
 	{
+		shapeNodes.clear();
+		shapeLinks.clear();
+
+		//Setting up the render for NODES on the screen
+		for (int i = 0; i < groundStructure.getNodes().size(); i++)
+		{
+			Node curNode = groundStructure.getNodes().at(i);
+			Coord tempCoord = convert(curNode, FRAME_ORIGIN, scaleFactor);
+			sf::CircleShape tempCircle;
+			tempCircle.setOrigin(sf::Vector2f(nodeRadius, nodeRadius));
+			tempCircle.setRadius(nodeRadius);
+			tempCircle.setPosition(tempCoord.sf_Vec());
+			tempCircle.setFillColor(sf::Color(200, 200, 200));
+			shapeNodes.push_back(tempCircle);
+		}
+
+		//Setting up the render for the LINKS on the screen
+		for (int i = 0; i < groundStructure.getLinks().size(); i++)
+		{
+			Link curLink = groundStructure.getLinks().at(i);
+			sf::RectangleShape tempRect;
+			Coord tempCoord1 = convert(curLink.getNode()[0], FRAME_ORIGIN, scaleFactor);
+			Coord tempCoord2 = convert(curLink.getNode()[1], FRAME_ORIGIN, scaleFactor);
+
+			tempRect.setOrigin(0, static_cast<float>(baseLinkThickness*curLink.getArea() / 2));
+
+			sf::Vector2f size = { 0,0 };
+			size.x = static_cast<float>(curLink.getLength()*scaleFactor);
+			size.y = static_cast<float>(baseLinkThickness*curLink.getArea());
+
+			float angle = static_cast<float>(curLink.getSlope());
+			angle *= -180 / PI;
+
+			tempRect.setPosition(tempCoord1.sf_Vec());
+			tempRect.setSize(size);
+			tempRect.setRotation(angle);
+
+			shapeLinks.push_back(tempRect);
+		}
+
+		for (int i = 0; i < groundStructure.getLinks().size(); i++)
+		{
+			double temp = Amax - Amin;
+			double color = 1/temp;
+			color *= (shapeLinks[i].getSize().y-Amin);
+			color *= 255;
+			color = static_cast<sf::Uint8>(color);
+			double k = 1.5;
+			shapeLinks[i].setFillColor(sf::Color((color)*k, (255-color)*k, 0));
+		}
+
+		//Event handling for the code
 		sf::Event event;
 		while (window.pollEvent(event))
 		{
 			if (event.type == sf::Event::Closed)
 				window.close();
 		}
-
-
+		
 		window.clear();
 
 		for (int i = 0; i < shapeLinks.size(); i++)
@@ -125,6 +163,13 @@ int main()
 			
 		
 		window.display();
+		printf("/nIter: %i \t Volume: %f \n ====================\n", iteration, mesh.getVol());
+		iteration++;
+		optimizeMeanCompliance(&mesh, maxVolume, Amin, Amax);
+
+		//VectorXd tempDisp = mesh.getDisplacement();
+		//std::cout << std::endl << tempDisp << std::endl;
+		sf::sleep(sf::seconds(1));
 	}
 
 	return 0;
@@ -200,4 +245,74 @@ Coord convert(Node& base,const Coord& FrameOrigin, int scale)
 	newCoord.y -= scale * base.y;
 
 	return newCoord;
+}
+
+
+void optimizeMeanCompliance(TrussFEM* mesh, double maxVol, double Amin, double Amax)
+{
+	double beta = 0.5;
+	mesh->assembleGlobal();
+	mesh->solve();
+
+	int size = mesh->getTruss().getLinks().size();
+	double Lambda = 0;
+	VectorXd Area(size);
+
+	for (int i = 0; i < size; i++)
+		Area(i) = mesh->getTruss().getLinks().at(i).getArea();
+
+	for (int i = 0; i < size; i++)
+	{
+		double tempVar;
+
+		VectorXd linkDisp(4);
+		Link link = mesh->getTruss().getLinks().at(i);
+		Matrix4d locStiff = TrussFEM::generateLocalStiffness(link);
+		linkDisp = mesh->getLinkDisp(link);
+
+		//std::cout << std::endl << linkDisp;
+		//std::cout << std::endl << locStiff;
+			
+		tempVar = (linkDisp.transpose()*locStiff*linkDisp);
+		//tempVar /= link.getLength()*link.getArea();
+		//tempVar *= link.getLength()*link.getArea();
+		Lambda += tempVar;
+	}
+	
+	Lambda /= maxVol;
+	
+	double limVol = 0;
+		
+	for (int i = 0; i < size; i++)
+	{
+		double tempVar;
+
+		VectorXd linkDisp(4);
+		Link link = mesh->getTruss().getLinks().at(i);
+		Matrix4d locStiff = TrussFEM::generateLocalStiffness(link);
+		linkDisp = mesh->getLinkDisp(link);
+
+		tempVar = linkDisp.transpose()*locStiff*linkDisp;
+		tempVar /= link.getArea()*link.getLength();
+
+		double x = tempVar;
+		x /= Lambda;
+		std::cout << "\n X: " << x;
+		x = pow(x, beta);
+		x *= Area(i);
+		std::cout << "\t Area: " << x;
+
+		if (x >= Amin && x <= Amax)
+			mesh->getTruss().updateArea(i, x);
+		else if (x > Amax)
+		{
+			mesh->getTruss().updateArea(i, Amax);
+			limVol += link.getLength()*Amax;
+		}
+		else if (x < Amin)
+		{
+			mesh->getTruss().updateArea(i, Amin);
+			limVol += link.getLength()*Amin;
+		}
+	}
 }

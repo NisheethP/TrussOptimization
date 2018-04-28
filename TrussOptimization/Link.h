@@ -28,9 +28,9 @@ class Link
 
 	Node nodes[2];
 public:
-	Link(Node n1 = { 0,0 }, Node n2 = {0,0});
+	Link(Node n1 = { 0,0 }, Node n2 = {0,0}, int ar = 1.f);
 	
-	double setArea(double ar) { area = ar; }
+	void setArea(double ar) { area = ar; }
 	
 	double getArea()	{ return area;	}
 	double getLength()	{ return length;}
@@ -40,6 +40,7 @@ public:
 	
 	
 	bool operator== (Link);
+	Link& operator= (Link);
 	
 	~Link();
 };

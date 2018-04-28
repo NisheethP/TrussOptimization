@@ -42,6 +42,7 @@ public:
 	bool applySimpleSupport(int nodeNum);				//Adds ux=0 and uy=0 value to the given 'nodeNum' in the 'displacement' vector
 	bool applyRollerSupport(int nodeNum);				//Adds ux=0 value to the given 'nodeNum' in the 'displacement' vector
 	bool setOptNode(int dofNum);						//Sets the dof that is to be 
+	double getVol();
 
 	bool isPrescribed(int dof);
 	bool solve();
@@ -51,7 +52,10 @@ public:
 	VectorXd getDisplacement() { return displacement; }
 	VectorXd getForce() { return force; }
 	VectorXd getVirtualDisp() { return virtualDisp; }
-	
+	Truss& getTruss() { return *truss; }
+	Eigen::SparseMatrix<double>& getGlobalStiffness() { return globalStiffness; }
+	Eigen::Matrix<double, 4, 1> getLinkDisp(Link& link);
+
 	~TrussFEM();
 };
 

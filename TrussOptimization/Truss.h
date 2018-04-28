@@ -19,8 +19,12 @@ public:
 	Truss();
 	Truss(Truss&);
 
-	std::vector<Node> getNodes() { return nodes; }
-	std::vector<Link> getLinks() { return links; }
+	std::vector<Node>& getNodes() { return nodes; }
+	std::vector<Link>& getLinks() { return links; }
+
+	void initArea(double ar);
+	void updateArea(int link, double area);
+
 	int getNodeNum(Node&);
 	Truss operator= (Truss&);
 

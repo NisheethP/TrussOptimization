@@ -28,16 +28,22 @@ Matrix4d TrussFEM::generateLocalStiffness(Link & link)
 	double K1 = cos(q)*cos(q);
 	double K2 = cos(q)*sin(q);
 	double K3 = sin(q)*sin(q);
+	if (K1 < 1e-15)
+		K1 = 0;
+	if (K2 < 1e-15)
+		K2 = 0;
+	if (K3 < 1e-15)
+		K3 = 0;
 
 	Matrix4d stiffness;
 
 	stiffness(0, 0) = K1;
 	stiffness(0, 1) = K2;
-	stiffness(0, 2) = -K1;
-	stiffness(0, 3) = -K2;
+	stiffness(0, 2) = -1*K1;
+	stiffness(0, 3) = -1*K2;
 	stiffness(1, 1) = K3;
-	stiffness(1, 2) = -K2;
-	stiffness(1, 3) = -K3;
+	stiffness(1, 2) = -1*K2;
+	stiffness(1, 3) = -1*K3;
 	stiffness(2, 2) = K1;
 	stiffness(2, 3) = K2;
 	stiffness(3, 3) = K3;
@@ -150,6 +156,15 @@ bool TrussFEM::setOptNode(int dofNum)
 	return true;
 }
 
+double TrussFEM::getVol()
+{
+	double vol = 0;
+	for (int i = 0; i < truss->getLinks().size(); i++)
+		vol += truss->getLinks().at(i).getLength()*truss->getLinks().at(i).getArea();
+
+	return vol;
+}
+
 
 bool TrussFEM::isPrescribed(int dof)
 {
@@ -176,7 +191,7 @@ bool TrussFEM::solve()
 	
 	reducedStiffness = temp;
 	
-	//std::cout << reducedStiffness;
+	//std::cout << "\nReduced stiffness:" <<reducedStiffness << std::endl;
 
 	VectorXd b(redSize), x(redSize);
 	int j = 0;
@@ -190,7 +205,7 @@ bool TrussFEM::solve()
 	}
 	
 
-	Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > solver;
+	Eigen::SimplicialLDLT<Eigen::SparseMatrix<double> > solver;
 	solver.compute(reducedStiffness);
 	if (solver.info() != Eigen::Success)
 	{
@@ -298,6 +313,19 @@ Eigen::SparseMatrix<double> TrussFEM::removeRowCol(int dof, Eigen::SparseMatrix<
 
 	temp2.setFromTriplets(trips.begin(), trips.end());
 	return temp2;
+}
+
+Eigen::Matrix<double, 4, 1> TrussFEM::getLinkDisp(Link & link)
+{
+	int n1 = truss->getNodeNum(link.getNode()[0]);
+	int n2 = truss->getNodeNum(link.getNode()[1]);
+	Eigen::Matrix<double, 4, 1> tempVec;
+	tempVec(0) = displacement(n1 * 2);
+	tempVec(1) = displacement(n1 * 2 + 1);
+	tempVec(2) = displacement(n2 * 2);
+	tempVec(3) = displacement(n2* 2 + 1);
+
+	return tempVec;
 }
 
 TrussFEM::~TrussFEM()
