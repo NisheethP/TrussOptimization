@@ -5,6 +5,7 @@
 #include <cmath>
 #include "TrussFEM.h"
 #include "Dial.h"
+#include "Button.h"
 
 //Shows the current state of the programme
 enum State
@@ -47,6 +48,9 @@ Coord convert(Node& base, const Coord& FrameOrigin, int scale);
 //Does one iteration of the optimality criterion approach
 void optimizeMeanCompliance(TrussFEM* mesh, double maxVol, double Amin = 0.01, double Amax = 2);
 
+//See which node is clicked
+int getMouseInNode(int x, int y, std::vector<Node> nodes, int scale, Coord FrameOrigin, float nodeSize = 6);
+
 int main()
 {
 	sf::Font font;
@@ -55,6 +59,14 @@ int main()
 	sf::Vector2f resolution;
 	resolution.x = static_cast<float>(sf::VideoMode::getDesktopMode().width*0.9);
 	resolution.y = static_cast<float>(sf::VideoMode::getDesktopMode().height*0.9);
+	sf::Texture simpleSupportTexture, rollerSupportTexture, downTexture, upTexture, leftTexture, rightTexture;
+	
+	simpleSupportTexture.loadFromFile("Resources\\SimpleSupport.png");
+	rollerSupportTexture.loadFromFile("Resources\\RollerSupport.png");
+	downTexture.loadFromFile("Resources\\Down.png");
+	upTexture.loadFromFile("Resources\\Up.png");
+	leftTexture.loadFromFile("Resources\\Left.png");
+	rightTexture.loadFromFile("Resources\\Right.png");
 
 	if (!font.loadFromFile("C:\\Windows\\Fonts\\FTLTLT.ttf"))
 	{
@@ -92,22 +104,38 @@ int main()
 	
 
 	TrussFEM mesh(&groundStructure);
-	mesh.applySimpleSupport(0);
-	mesh.applyRollerSupport(30);
+	//mesh.applySimpleSupport(0);
+	//mesh.applyRollerSupport(30);
 
 	mesh.applyForceY(5, -15000);
 	//mesh.applyForceX(5, -15000);
 	int iteration = 0;
 
-	const int SizeInitX = 0.75*resolution.x;
-	const int SizeInitY = 0.15*resolution.y;
-	const int SizeDelY = 60;
+	const int InitX = 0.75*resolution.x;
+	const int InitY = 0.15*resolution.y;
+	const int DelY = 60;
+
+	const int simpleSupportX = 0.75*resolution.x;
+
+	int ForceX = 0;
+	int ForceY = 0;
 
 	//BUTTONS
-	Dial sizeXDial(&sizeX, SizeInitX, SizeDelY * 0 + SizeInitY, "Nodes-X", font, 100);
-	Dial sizeYDial(&sizeY, SizeInitX, SizeDelY * 1 + SizeInitY, "Nodes-Y", font, 100);
+	Button SetSimpleSupports(simpleSupportX, DelY*4 +DelY, 300, 40, font, "Set Simple Supports ->");
+	Button SetRollerSupports(simpleSupportX, DelY * 5 + DelY, 300, 40, font, "Set Roller Supports ->");
+	Button SetForceX(simpleSupportX, DelY * 4 + DelY, 300, 40, font, "Set X Forces ->");
+	Button SetForceY(simpleSupportX, DelY * 4 + DelY, 300, 40, font, "Set Y Forces ->");
+
+	//DIALS
+	Dial sizeXDial(&sizeX, InitX, DelY * 0 + InitY, "Nodes-X", font, 100);
+	Dial sizeYDial(&sizeY, InitX, DelY * 1 + InitY, "Nodes-Y", font, 100);
+	
+	Dial forceXDial(&ForceX, InitX, DelY * 0 + InitY, "Force X", font, 150);
+	Dial forceYDial(&ForceY, InitX, DelY * 0 + InitY, "Force Y", font, 150);
 
 	State runState = Initializing;
+
+	std::vector<sf::Sprite> simpSupportSprites, rollerSupportSprites, upSprites, downSprites, leftSprites, rightSprites;
 	//Programme Loop. This is when the rendering is happening
 	while (window.isOpen())
 	{
@@ -118,37 +146,130 @@ int main()
 		//std::cout << std::endl << scaleFactor;
 		//Event handling for the code
 		sf::Event event;
+		//std::cout << runState;
 		while (window.pollEvent(event))
 		{
 			if (event.type == sf::Event::Closed)
 				window.close();
 			if (event.type == sf::Event::MouseButtonPressed)
 			{
-				//Check for SizeX
-				if (sizeXDial.checkUp(mouse, sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y))
+				if (runState == Initializing)
 				{
-					sizeXDial.incVal();
-					getGroundStructure(sizeX, sizeY, &groundStructure);
+					//Go to Setting supports
+					if (SetSimpleSupports.isButtonPressed(mouse, sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y))
+					{
+						runState = SettingSimpleSupport;
+					}
+					//Check for SizeX
+					if (sizeXDial.checkUp(mouse, sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y))
+					{
+						sizeXDial.incVal();
+						getGroundStructure(sizeX, sizeY, &groundStructure);
+					}
+
+					if (sizeXDial.checkDown(mouse, sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y) && sizeXDial.getVal() > 1)
+					{
+						sizeXDial.decVal();
+						getGroundStructure(sizeX, sizeY, &groundStructure);
+					}
+
+					//Check for SizeY
+					if (sizeYDial.checkUp(mouse, sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y))
+					{
+						sizeYDial.incVal();
+						getGroundStructure(sizeX, sizeY, &groundStructure);
+					}
+
+					if (sizeYDial.checkDown(mouse, sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y) && sizeYDial.getVal() > 1)
+					{
+						sizeYDial.decVal();
+						getGroundStructure(sizeX, sizeY, &groundStructure);
+					}
+				}
+				if (runState == SettingSimpleSupport)
+				{
+					int node = getMouseInNode(sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y, groundStructure.getNodes(), scaleFactor, FRAME_ORIGIN, nodeRadius);
+					if (node >= 0 && node < groundStructure.getNodes().size())
+					{
+						mesh.applySimpleSupport(node);
+						sf::Sprite temp(simpleSupportTexture);
+												
+						temp.setOrigin(temp.getLocalBounds().width/2,0);
+						temp.setScale({ 0.5,0.5 });
+						temp.setPosition(convert(groundStructure.getNodes().at(node), FRAME_ORIGIN, scaleFactor).sf_Vec());
+
+						simpSupportSprites.push_back(temp);
+
+					}
+
+					if (SetRollerSupports.isButtonPressed(mouse, sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y))
+					{
+						runState = SettingRollerSupport;
+					}
 				}
 
-				if (sizeXDial.checkDown(mouse, sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y) && sizeXDial.getVal() > 1)
+				if (runState == SettingRollerSupport)
 				{
-					sizeXDial.decVal();
-					getGroundStructure(sizeX, sizeY, &groundStructure);
+					int node = getMouseInNode(sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y, groundStructure.getNodes(), scaleFactor, FRAME_ORIGIN, nodeRadius);
+					bool isPres = mesh.isPrescribed(node*2) || mesh.isPrescribed(node*2+1);
+					if (node >= 0 && node < groundStructure.getNodes().size() && !isPres)
+					{
+						mesh.applySimpleSupport(node);
+						sf::Sprite temp(rollerSupportTexture);
+
+						temp.setOrigin(temp.getLocalBounds().width / 2, 0);
+						temp.setScale({ 0.5,0.5 });
+						temp.setPosition(convert(groundStructure.getNodes().at(node), FRAME_ORIGIN, scaleFactor).sf_Vec());
+
+						simpSupportSprites.push_back(temp);
+
+					}
+
+					if (SetForceX.isButtonPressed(mouse, sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y))
+					{
+						runState = SettingForceX;
+					}
 				}
 
-				//Check for SizeY
-				if (sizeYDial.checkUp(mouse, sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y))
+				if (runState == SettingForceX)
 				{
-					sizeYDial.incVal();
-					getGroundStructure(sizeX, sizeY, &groundStructure);
+					if (SetForceX.isButtonPressed(mouse, sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y))
+					{
+						runState = SettingForceX;
+					}
+
+					if (forceXDial.checkUp(mouse, sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y))
+					{
+						for (int i = 0; i < 1000; i++)
+							sizeXDial.incVal();
+						getGroundStructure(sizeX, sizeY, &groundStructure);
+					}
+
+					if (forceXDial.checkDown(mouse, sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y) && sizeXDial.getVal() > 1)
+					{
+						for (int i = 0; i < 1000; i++)
+							sizeXDial.decVal();
+						getGroundStructure(sizeX, sizeY, &groundStructure);
+					}
+
+					int node = getMouseInNode(sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y, groundStructure.getNodes(), scaleFactor, FRAME_ORIGIN, nodeRadius);
+					bool isPres = mesh.isPrescribed(node * 2) || mesh.isPrescribed(node * 2 + 1);
+					if (node >= 0 && node < groundStructure.getNodes().size() && !isPres)
+					{
+						if (ForceX > 0)
+						{
+
+						}
+					}
 				}
 
-				if (sizeYDial.checkDown(mouse, sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y) && sizeYDial.getVal() > 1)
+				if (runState == SettingForceY)
 				{
-					sizeYDial.decVal();
-					getGroundStructure(sizeX, sizeY, &groundStructure);
+
 				}
+
+				if (runState != Solving)
+					sf::sleep(sf::milliseconds(200));
 			}
 		}
 		
@@ -210,9 +331,17 @@ int main()
 		window.clear();
 
 		if (runState == Initializing)
+		{
 			sizeXDial.Draw(window);
-		if (runState == Initializing)
 			sizeYDial.Draw(window);
+			SetSimpleSupports.Draw(window);
+		}
+
+		if (runState == SettingSimpleSupport)
+			SetRollerSupports.Draw(window);
+
+		if (runState == SettingRollerSupport)
+			SetForceX.Draw(window);
 
 		for (int i = 0; i < shapeLinks.size(); i++)
 			window.draw(shapeLinks[i]);
@@ -220,6 +349,13 @@ int main()
 		//Drawing on the Window
 		for (int i = 0; i < shapeNodes.size(); i++)
 			window.draw(shapeNodes[i]);
+
+		for (int i = 0; i < simpSupportSprites.size(); i++)
+			window.draw(simpSupportSprites[i]);
+
+		for (int i = 0; i < rollerSupportSprites.size(); i++)
+			window.draw(rollerSupportSprites[i]);
+
 			
 		
 		window.display();
@@ -229,7 +365,6 @@ int main()
 
 		//VectorXd tempDisp = mesh.getDisplacement();
 		//std::cout << std::endl << tempDisp << std::endl;
-		//sf::sleep(sf::milliseconds(500));
 	}
 
 	return 0;
@@ -471,4 +606,22 @@ void optimizeMeanCompliance(TrussFEM* mesh, double maxVol, double Amin, double A
 	{
 		//double newVol = maxVol - limVol;
 	}
+}
+
+//Get Node number for mouse click
+int getMouseInNode(int x, int y, std::vector<Node> nodes, int scale, Coord FrameOrigin, float nodeSize)
+{
+	for (int i = 0; i < nodes.size(); i++)
+	{
+		Coord tempVec = convert(nodes[i], FrameOrigin, scale);
+		double dist = tempVec.x - x;
+		dist *= dist;
+		dist += (tempVec.y - y)*(tempVec.y - y);
+		dist = sqrt(dist);
+
+		if (dist <= nodeSize)
+			return i;
+	}
+
+	return -1;
 }
