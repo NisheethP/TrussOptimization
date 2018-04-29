@@ -54,11 +54,11 @@ int main()
 	sf::RenderWindow window(sf::VideoMode(1600, 900), "Truss Optimization");
 	
 	const Coord FRAME_ORIGIN = { 100,850 };		//The coordinates of the first node. Origin at TOP-LEFT CORNER of screen. X rightwards; Y downwards;
-	int scaleFactor = 200;	//Scaling of the truss for rendering. The nodes are 1 unit apart. Spacing is scaled by this factor .
-	int sizeX = 5;			//Number of Nodes in X direction
-	int sizeY = 5;			//Number of Nodes in Y direction
-	double maxVolume = 200;	//The volume constraint for the problem
-	double Amin = 0.001;	//The lower bound on the area
+	int scaleFactor = 250;	//Scaling of the truss for rendering. The nodes are 1 unit apart. Spacing is scaled by this factor .
+	int sizeX = 3;			//Number of Nodes in X direction
+	int sizeY = 3;			//Number of Nodes in Y direction
+	double maxVolume = 100;	//The volume constraint for the problem
+	double Amin = 0.01;	//The lower bound on the area
 	double Amax = 10;		//The upper bound on the area
 
 	float baseLinkThickness = 1.f;
@@ -83,14 +83,15 @@ int main()
 		netL += groundStructure.getLinks().at(i).getLength();
 	double baseAreaFactor = maxVolume / netL;
 
-	groundStructure.initArea(1);
+	groundStructure.initArea(3);
 	
 
 	TrussFEM mesh(&groundStructure);
 	mesh.applySimpleSupport(0);
-	mesh.applyRollerSupport(20);
+	mesh.applyRollerSupport(6);
 
-	mesh.applyForceY(4, -15000);
+	mesh.applyForceY(5, -15000);
+	mesh.applyForceX(5, -15000);
 	int iteration = 0;
 	
 	//Programme Loop. This is when the rendering is happening
@@ -142,10 +143,10 @@ int main()
 			double color = 1/temp;
 			color *= (shapeLinks[i].getSize().y-Amin);
 			color *= 255;
-			double k = 1.5;
+			double k = 1;
 			double red = static_cast<sf::Uint8>(color * k);
 			double green = static_cast<sf::Uint8>((255 - color)*k);
-			double blue = 150;
+			double blue = 50;
 			shapeLinks[i].setFillColor(sf::Color(red, green, blue));
 		}
 
@@ -174,7 +175,7 @@ int main()
 
 		//VectorXd tempDisp = mesh.getDisplacement();
 		//std::cout << std::endl << tempDisp << std::endl;
-		//sf::sleep(sf::milliseconds(500));
+		sf::sleep(sf::milliseconds(500));
 	}
 
 	return 0;
@@ -255,63 +256,89 @@ Coord convert(Node& base,const Coord& FrameOrigin, int scale)
 
 void optimizeMeanCompliance(TrussFEM* mesh, double maxVol, double Amin, double Amax)
 {
+	bool inInnerLoop = true;
 	double beta = 0.5;
-	mesh->assembleGlobal();
-	mesh->solve();
-
-	int size = mesh->getTruss().getLinks().size();
-	double Lambda = 0;
-	VectorXd Area(size);
-
-	for (int i = 0; i < size; i++)
-		Area(i) = mesh->getTruss().getLinks().at(i).getArea();
-
-	for (int i = 0; i < size; i++)
+	do
 	{
-		double tempVar;
+		mesh->assembleGlobal();
+		mesh->solve();
 
-		VectorXd linkDisp(4);
-		Link link = mesh->getTruss().getLinks().at(i);
-		Matrix4d locStiff = TrussFEM::generateLocalStiffness(link);
-		linkDisp = mesh->getLinkDisp(link);
+		int size = mesh->getTruss().getLinks().size();
+		double Lambda = 0;
+		VectorXd Area(size);
 
-		//std::cout << std::endl << linkDisp;
-		//std::cout << std::endl << locStiff;
+		for (int i = 0; i < size; i++)
+			Area(i) = mesh->getTruss().getLinks().at(i).getArea();
 
-		tempVar = (linkDisp.transpose()*locStiff*linkDisp);
-		//tempVar /= link.getLength()*link.getArea();
-		//tempVar *= link.getLength()*link.getArea();
-		Lambda += tempVar;
-	}
+		for (int i = 0; i < size; i++)
+		{
+			double tempVar;
 
-	Lambda /= maxVol;
+			VectorXd linkDisp(4);
+			Link link = mesh->getTruss().getLinks().at(i);
+			Matrix4d locStiff = TrussFEM::generateLocalStiffness(link);
+			linkDisp = mesh->getLinkDisp(link);
 
-	double limVol = 0;
+			//std::cout << std::endl << linkDisp;
+			//std::cout << std::endl << locStiff;
 
-	for (int i = 0; i < size; i++)
+			tempVar = (linkDisp.transpose()*locStiff*linkDisp);
+			tempVar /= maxVol;
+			tempVar *= link.getLength()*link.getArea();
+			Lambda += tempVar;
+		}
+
+		Lambda /= maxVol;
+
+		double limVol = 0;
+		
+
+		for (int i = 0; i < size; i++)
+		{
+			double tempVar;
+
+			VectorXd linkDisp(4);
+			Link link = mesh->getTruss().getLinks().at(i);
+
+			inInnerLoop = false;
+
+			if (link.getArea() != Amin && link.getArea() != Amax)
+			{
+				Matrix4d locStiff = TrussFEM::generateLocalStiffness(link);
+				linkDisp = mesh->getLinkDisp(link);
+
+				tempVar = linkDisp.transpose()*locStiff*linkDisp;
+				tempVar /= maxVol;
+
+				double x = tempVar;
+				x /= Lambda;
+				std::cout << std::endl << i << ".  Lambda: " << x;
+				x = pow(x, beta);
+				x *= Area(i);
+				std::cout << "\t Area: " << x;
+
+				
+
+				if (x >= Amin && x <= Amax)
+					mesh->getTruss().updateArea(i, x);
+				else if (x > Amax)
+				{
+					mesh->getTruss().updateArea(i, Amax);
+					limVol += link.getArea()*link.getLength();
+					inInnerLoop = true;
+				}
+				else if (x < Amin)
+				{
+					mesh->getTruss().updateArea(i, Amin);
+					limVol += link.getArea()*link.getLength();
+					inInnerLoop = true;
+				}
+			}
+		}
+	} while (inInnerLoop);
+	
+	//while (inInnerLoop)
 	{
-		double tempVar;
-
-		VectorXd linkDisp(4);
-		Link link = mesh->getTruss().getLinks().at(i);
-		Matrix4d locStiff = TrussFEM::generateLocalStiffness(link);
-		linkDisp = mesh->getLinkDisp(link);
-
-		tempVar = linkDisp.transpose()*locStiff*linkDisp;
-		tempVar /= link.getArea()*link.getLength();
-
-		double x = tempVar;
-		x /= Lambda;
-		std::cout << std::endl << i << ".  Lambda: " << x;
-		x = pow(x, beta);
-		x *= Area(i);
-		std::cout << "\t Area: " << x;
-
-		if (x >= Amin && x <= Amax)
-			mesh->getTruss().updateArea(i, x);
-		else if (x > Amax)
-			mesh->getTruss().updateArea(i, Amax);
-		else if (x < Amin)
-			mesh->getTruss().updateArea(i, Amin);
+		//double newVol = maxVol - limVol;
 	}
 }
