@@ -24,10 +24,13 @@
     <ClCompile Include="Truss.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="baseButton.cpp">
+    <ClCompile Include="TrussFEM.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="TrussFEM.cpp">
+    <ClCompile Include="Button.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Dial.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -38,10 +41,13 @@
     <ClInclude Include="Truss.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="baseButton.h">
+    <ClInclude Include="TrussFEM.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="TrussFEM.h">
+    <ClInclude Include="Button.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Dial.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

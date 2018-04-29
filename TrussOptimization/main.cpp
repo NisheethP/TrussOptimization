@@ -4,18 +4,17 @@
 #include <list>
 #include <cmath>
 #include "TrussFEM.h"
+#include "Dial.h"
 
 //Shows the current state of the programme
 enum State
 {
-	Solving,						//Solving the FEM, and optimizing the structure
-	GroundStructure,				//Showing the GroundStructure (GS)
+	Solving,						//Solving the problem
 	SettingSimpleSupport,			//Setting Simple Supports on the GS
 	SettingRollerSupport,			//Setting Roller Supports on the GS;
 	SettingForceX,					//Setting the X direction force on the GS
 	SettingForceY,					//Setting the Y direction force on the GS
 	Initializing,					//Setting up the data for the GS
-	Animating						//Animating the iteration to the optimal truss from GS;
 };
 
 //Struct to hod the coordinates of a point.
@@ -48,17 +47,28 @@ Coord convert(Node& base, const Coord& FrameOrigin, int scale);
 //Does one iteration of the optimality criterion approach
 void optimizeMeanCompliance(TrussFEM* mesh, double maxVol, double Amin = 0.01, double Amax = 2);
 
-//Standard insertion point for the programme. This has a console besides the windows being made. For DEBUG VERSION.
 int main()
 {
-	sf::RenderWindow window(sf::VideoMode(1600, 900), "Truss Optimization");
+	sf::Font font;
+	sf::Mouse mouse;
+
+	sf::Vector2f resolution;
+	resolution.x = static_cast<float>(sf::VideoMode::getDesktopMode().width*0.9);
+	resolution.y = static_cast<float>(sf::VideoMode::getDesktopMode().height*0.9);
+
+	if (!font.loadFromFile("C:\\Windows\\Fonts\\FTLTLT.ttf"))
+	{
+		return -1;
+	}
+
+	sf::RenderWindow window(sf::VideoMode(resolution.x, resolution.y), "Truss Optimization");
 	
-	const Coord FRAME_ORIGIN = { 100,850 };		//The coordinates of the first node. Origin at TOP-LEFT CORNER of screen. X rightwards; Y downwards;
-	int scaleFactor = 250;	//Scaling of the truss for rendering. The nodes are 1 unit apart. Spacing is scaled by this factor .
-	int sizeX = 3;			//Number of Nodes in X direction
-	int sizeY = 3;			//Number of Nodes in Y direction
-	double maxVolume = 100;	//The volume constraint for the problem
-	double Amin = 0.01;	//The lower bound on the area
+	Coord FRAME_ORIGIN = { 50, static_cast<float>(resolution.y*0.95) };		//The coordinates of the first node. Origin at TOP-LEFT CORNER of screen. X rightwards; Y downwards;
+	int sizeX = 6;			//Number of Nodes in X direction
+	int sizeY = 6;			//Number of Nodes in Y direction
+	int scaleFactor = (sizeX>=sizeY)?(-FRAME_ORIGIN.x + 0.6*resolution.x)/sizeX: (-FRAME_ORIGIN.y + 0.6*resolution.y) / sizeY;	//Scaling of the truss for rendering. The nodes are 1 unit apart. Spacing is scaled by this factor .
+	double maxVolume = 1200;	//The volume constraint for the problem
+	double Amin = 0.001;		//The lower bound on the area
 	double Amax = 10;		//The upper bound on the area
 
 	float baseLinkThickness = 1.f;
@@ -78,28 +88,70 @@ int main()
 	//Link tlink({ 0,0 }, { 1,1 });
 	//std::cout << TrussFEM::generateLocalStiffness(tlink);
 
-	double netL = 0;
-	for (int i = 0; i < groundStructure.getLinks().size(); i++)
-		netL += groundStructure.getLinks().at(i).getLength();
-	double baseAreaFactor = maxVolume / netL;
-
 	groundStructure.initArea(3);
 	
 
 	TrussFEM mesh(&groundStructure);
 	mesh.applySimpleSupport(0);
-	mesh.applyRollerSupport(6);
+	mesh.applyRollerSupport(30);
 
 	mesh.applyForceY(5, -15000);
-	mesh.applyForceX(5, -15000);
+	//mesh.applyForceX(5, -15000);
 	int iteration = 0;
-	
+
+	const int SizeInitX = 0.75*resolution.x;
+	const int SizeInitY = 0.15*resolution.y;
+	const int SizeDelY = 60;
+
+	//BUTTONS
+	Dial sizeXDial(&sizeX, SizeInitX, SizeDelY * 0 + SizeInitY, "Nodes-X", font, 100);
+	Dial sizeYDial(&sizeY, SizeInitX, SizeDelY * 1 + SizeInitY, "Nodes-Y", font, 100);
+
+	State runState = Initializing;
 	//Programme Loop. This is when the rendering is happening
 	while (window.isOpen())
 	{
 		shapeNodes.clear();
 		shapeLinks.clear();
+	
+		scaleFactor = (sizeX >= sizeY) ? (-FRAME_ORIGIN.x + 0.6*resolution.x) / sizeX : (FRAME_ORIGIN.y - 0.02*resolution.y) / sizeY;
+		//std::cout << std::endl << scaleFactor;
+		//Event handling for the code
+		sf::Event event;
+		while (window.pollEvent(event))
+		{
+			if (event.type == sf::Event::Closed)
+				window.close();
+			if (event.type == sf::Event::MouseButtonPressed)
+			{
+				//Check for SizeX
+				if (sizeXDial.checkUp(mouse, sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y))
+				{
+					sizeXDial.incVal();
+					getGroundStructure(sizeX, sizeY, &groundStructure);
+				}
 
+				if (sizeXDial.checkDown(mouse, sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y) && sizeXDial.getVal() > 1)
+				{
+					sizeXDial.decVal();
+					getGroundStructure(sizeX, sizeY, &groundStructure);
+				}
+
+				//Check for SizeY
+				if (sizeYDial.checkUp(mouse, sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y))
+				{
+					sizeYDial.incVal();
+					getGroundStructure(sizeX, sizeY, &groundStructure);
+				}
+
+				if (sizeYDial.checkDown(mouse, sf::Mouse::getPosition(window).x, sf::Mouse::getPosition(window).y) && sizeYDial.getVal() > 1)
+				{
+					sizeYDial.decVal();
+					getGroundStructure(sizeX, sizeY, &groundStructure);
+				}
+			}
+		}
+		
 		//Setting up the render for NODES on the screen
 		for (int i = 0; i < groundStructure.getNodes().size(); i++)
 		{
@@ -140,8 +192,8 @@ int main()
 		for (int i = 0; i < groundStructure.getLinks().size(); i++)
 		{
 			double temp = Amax - Amin;
-			double color = 1/temp;
-			color *= (shapeLinks[i].getSize().y-Amin);
+			double color = 1 / temp;
+			color *= (shapeLinks[i].getSize().y - Amin);
 			color *= 255;
 			double k = 1;
 			double red = static_cast<sf::Uint8>(color * k);
@@ -150,15 +202,17 @@ int main()
 			shapeLinks[i].setFillColor(sf::Color(red, green, blue));
 		}
 
-		//Event handling for the code
-		sf::Event event;
-		while (window.pollEvent(event))
+		if (runState == Solving)
 		{
-			if (event.type == sf::Event::Closed)
-				window.close();
+			optimizeMeanCompliance(&mesh, maxVolume, Amin, Amax);
 		}
 		
 		window.clear();
+
+		if (runState == Initializing)
+			sizeXDial.Draw(window);
+		if (runState == Initializing)
+			sizeYDial.Draw(window);
 
 		for (int i = 0; i < shapeLinks.size(); i++)
 			window.draw(shapeLinks[i]);
@@ -169,13 +223,13 @@ int main()
 			
 		
 		window.display();
-		printf("\nIter: %i \t Volume: %f \n ====================\n", iteration, mesh.getVol());
+		//printf("\nIter: %i \t Volume: %f \n ====================\n", iteration, mesh.getVol());
 		iteration++;
-		optimizeMeanCompliance(&mesh, maxVolume, Amin, Amax);
+		
 
 		//VectorXd tempDisp = mesh.getDisplacement();
 		//std::cout << std::endl << tempDisp << std::endl;
-		sf::sleep(sf::milliseconds(500));
+		//sf::sleep(sf::milliseconds(500));
 	}
 
 	return 0;
@@ -253,13 +307,91 @@ Coord convert(Node& base,const Coord& FrameOrigin, int scale)
 	return newCoord;
 }
 
-
+//NUmerically approach the value of Solution
 void optimizeMeanCompliance(TrussFEM* mesh, double maxVol, double Amin, double Amax)
 {
-	bool inInnerLoop = true;
+	bool inInnerLoop = false;
 	double beta = 0.5;
-	do
+	double limVol = 0;
+
+	mesh->assembleGlobal();
+	mesh->solve();
+
+	int size = mesh->getTruss().getLinks().size();
+	double Lambda = 0;
+	VectorXd Area(size);
+
+	for (int i = 0; i < size; i++)
+		Area(i) = mesh->getTruss().getLinks().at(i).getArea();
+
+	for (int i = 0; i < size; i++)
 	{
+		double tempVar;
+
+		VectorXd linkDisp(4);
+		Link link = mesh->getTruss().getLinks().at(i);
+		Matrix4d locStiff = TrussFEM::generateLocalStiffness(link);
+		linkDisp = mesh->getLinkDisp(link);
+
+		//std::cout << std::endl << linkDisp;
+		//std::cout << std::endl << locStiff;
+
+		tempVar = (linkDisp.transpose()*locStiff*linkDisp);
+		tempVar /= maxVol;
+		tempVar *= link.getLength()*link.getArea();
+		Lambda += tempVar;
+	}
+
+	Lambda /= (maxVol - limVol);
+
+
+	for (int i = 0; i < size; i++)
+	{
+		double tempVar;
+
+		VectorXd linkDisp(4);
+		Link link = mesh->getTruss().getLinks().at(i);
+
+		inInnerLoop = false;
+
+		//if (link.getArea() != Amin && link.getArea() != Amax)
+		{
+			Matrix4d locStiff = TrussFEM::generateLocalStiffness(link);
+			linkDisp = mesh->getLinkDisp(link);
+
+			tempVar = linkDisp.transpose()*locStiff*linkDisp;
+			tempVar /= maxVol;
+
+			double x = tempVar;
+			x /= Lambda;
+			std::cout << std::endl << i << ".  StrEng: " << tempVar;
+			x = pow(x, beta);
+			x *= Area(i);
+			//std::cout << "\t Area: " << x;
+
+
+
+			if (x >= Amin && x <= Amax)
+				mesh->getTruss().updateArea(i, x);
+			else if (x > Amax)
+			{
+				mesh->getTruss().updateArea(i, Amax);
+				limVol += link.getArea()*link.getLength();
+				inInnerLoop = true;
+			}
+			else if (x < Amin)
+			{
+				mesh->getTruss().updateArea(i, Amin);
+				limVol += link.getArea()*link.getLength();
+				inInnerLoop = true;
+			}
+		}
+	}
+
+	while (inInnerLoop)
+	{
+		double limVol = 0;
+
 		mesh->assembleGlobal();
 		mesh->solve();
 
@@ -288,9 +420,7 @@ void optimizeMeanCompliance(TrussFEM* mesh, double maxVol, double Amin, double A
 			Lambda += tempVar;
 		}
 
-		Lambda /= maxVol;
-
-		double limVol = 0;
+		Lambda /= (maxVol-limVol);
 		
 
 		for (int i = 0; i < size; i++)
@@ -312,10 +442,10 @@ void optimizeMeanCompliance(TrussFEM* mesh, double maxVol, double Amin, double A
 
 				double x = tempVar;
 				x /= Lambda;
-				std::cout << std::endl << i << ".  Lambda: " << x;
+				//std::cout << std::endl << i << ".  Lambda: " << tempVar;
 				x = pow(x, beta);
 				x *= Area(i);
-				std::cout << "\t Area: " << x;
+				//std::cout << "\t Area: " << x;
 
 				
 
@@ -335,7 +465,7 @@ void optimizeMeanCompliance(TrussFEM* mesh, double maxVol, double Amin, double A
 				}
 			}
 		}
-	} while (inInnerLoop);
+	} 
 	
 	//while (inInnerLoop)
 	{

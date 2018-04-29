@@ -19,14 +19,16 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="baseButton.cpp" />
+    <ClCompile Include="Button.cpp" />
+    <ClCompile Include="Dial.cpp" />
     <ClCompile Include="Link.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Truss.cpp" />
     <ClCompile Include="TrussFEM.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="baseButton.h" />
+    <ClInclude Include="Button.h" />
+    <ClInclude Include="Dial.h" />
     <ClInclude Include="Link.h" />
     <ClInclude Include="Truss.h" />
     <ClInclude Include="TrussFEM.h" />
